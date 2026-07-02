@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "framework": "nextjs",
   "buildCommand": "cd web && bun run build",
   "devCommand": "cd web && bun run dev",
   "installCommand": "cd web && bun install",
