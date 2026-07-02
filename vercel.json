@@ -5,23 +5,5 @@
   "installCommand": "bun install",
   "env": {
     "NODE_ENV": "production"
-  },
-  "projects": [
-    {
-      "name": "infinite-canvas-web",
-      "rootDirectory": "web",
-      "outputDirectory": ".next",
-      "buildCommand": "bun run build",
-      "devCommand": "bun run dev",
-      "installCommand": "bun install"
-    },
-    {
-      "name": "infinite-canvas-docs",
-      "rootDirectory": "docs",
-      "outputDirectory": ".next",
-      "buildCommand": "bun run build",
-      "devCommand": "bun run dev",
-      "installCommand": "bun install"
-    }
-  ]
+  }
 }
