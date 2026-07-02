@@ -375,7 +375,14 @@ export function buildApiUrl(baseUrl: string, path: string) {
     normalizedBaseUrl = normalizeArkPlanBaseUrl(normalizedBaseUrl);
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     const apiBaseUrl = lowerBaseUrl.endsWith("/v1") || lowerBaseUrl.endsWith("/api/v3") || lowerBaseUrl.endsWith("/api/plan/v3") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
-    return `${apiBaseUrl}${path}`;
+    const url = `${apiBaseUrl}${path}`;
+    return shouldProxyApiUrl(url) ? `/api/ai-proxy?url=${encodeURIComponent(url)}` : url;
+}
+
+function shouldProxyApiUrl(url: string) {
+    if (!url.toLowerCase().startsWith("http://")) return false;
+    if (typeof window === "undefined") return false;
+    return window.location.protocol === "https:";
 }
 
 function normalizeArkPlanBaseUrl(baseUrl: string) {
