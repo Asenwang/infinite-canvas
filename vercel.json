@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "buildCommand": "cd web && bun install && bun run build",
-  "devCommand": "cd web && bun run dev",
+  "buildCommand": "bun install && bun run build",
+  "devCommand": "bun run dev",
   "installCommand": "bun install",
   "env": {
     "NODE_ENV": "production"
-  }
+  },
+  "root": "web"
 }
