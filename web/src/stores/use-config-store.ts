@@ -45,6 +45,7 @@ export type AiConfig = {
     size: string;
     count: string;
     canvasImageCount: string;
+    canvasImageCountMigrated: boolean;
 };
 
 export type WebdavSyncConfig = {
@@ -100,6 +101,7 @@ export const defaultConfig: AiConfig = {
     size: "1:1",
     count: "1",
     canvasImageCount: "1",
+    canvasImageCountMigrated: true,
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -227,7 +229,8 @@ export const useConfigStore = create<ConfigStore>()(
                         vquality: config.vquality || "720",
                         videoGenerateAudio: config.videoGenerateAudio || "true",
                         videoWatermark: config.videoWatermark || "false",
-                        canvasImageCount: config.canvasImageCount || defaultConfig.canvasImageCount,
+                        canvasImageCount: normalizePersistedCanvasImageCount(config.canvasImageCount, config.canvasImageCountMigrated),
+                        canvasImageCountMigrated: true,
                         imageModels: Array.isArray(persistedConfig.imageModels) ? normalizeModelList(config.imageModels, channels) : filterModelsByCapability(models, "image"),
                         videoModels: Array.isArray(persistedConfig.videoModels) ? normalizeModelList(config.videoModels, channels) : filterModelsByCapability(models, "video"),
                         textModels: Array.isArray(persistedConfig.textModels) ? normalizeModelList(config.textModels, channels) : filterModelsByCapability(models, "text"),
@@ -244,6 +247,11 @@ function normalizeModelList(models: string[], channels: ModelChannel[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)))
         .map((model) => normalizeModelOptionValue(model, channels))
         .filter((model) => !allModelOptions.length || allModelOptions.includes(model) || !isChannelModelValue(model));
+}
+
+function normalizePersistedCanvasImageCount(value: string, migrated: boolean) {
+    const count = Math.max(1, Math.min(3, Math.floor(Math.abs(Number(value)) || 1)));
+    return String(!migrated && count === 3 ? 1 : count);
 }
 
 export function useEffectiveConfig() {
