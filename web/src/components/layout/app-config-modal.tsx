@@ -39,12 +39,11 @@ const apiFormatOptions: Array<{ label: string; value: ApiCallFormat }> = [
     { label: "Gemini", value: "gemini" },
 ];
 
-const webdavDomainKeys: AppSyncDomainKey[] = ["canvas", "assets", "image-workbench", "video-workbench"];
+const webdavDomainKeys: AppSyncDomainKey[] = ["canvas", "assets", "image-workbench"];
 const webdavDomainLabels: Record<AppSyncDomainKey, string> = {
     canvas: "画布",
     assets: "我的素材",
     "image-workbench": "生图工作台",
-    "video-workbench": "视频创作台",
 };
 
 function createWebdavDomainProgress(): Record<AppSyncDomainKey, WebdavDomainProgress> {
@@ -198,7 +197,7 @@ export function AppConfigModal() {
         try {
             const result = await syncAppDataToWebdav(webdav, updateWebdavProgress);
             updateWebdavConfig("lastSyncedAt", result.syncedAt);
-            message.success(`同步完成：${result.projects} 个画布，${result.assets} 个素材，${result.imageLogs + result.videoLogs} 条记录，本次上传 ${result.uploadedFiles} 个文件 ${formatBytes(result.uploadedBytes)}`);
+            message.success(`同步完成：${result.projects} 个画布，${result.assets} 个素材，${result.imageLogs} 条记录，本次上传 ${result.uploadedFiles} 个文件 ${formatBytes(result.uploadedBytes)}`);
         } catch (error) {
             setWebdavSyncStatus(error instanceof Error ? error.message : "WebDAV 同步失败");
             message.error(error instanceof Error ? error.message : "WebDAV 同步失败");
@@ -340,7 +339,7 @@ export function AppConfigModal() {
                                         <Input
                                             type="number"
                                             min={1}
-                                            max={15}
+                                            max={3}
                                             value={config.canvasImageCount}
                                             onChange={(event) => updateConfig("canvasImageCount", event.target.value)}
                                             onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
@@ -470,7 +469,7 @@ function normalizeDefaultModel(value: string, options: string[]) {
 }
 
 function normalizeImageCount(value: string) {
-    return String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(value)) || 3))));
+    return String(Math.max(1, Math.min(3, Math.floor(Math.abs(Number(value)) || 1))));
 }
 
 function uniqueModels(models: string[]) {
