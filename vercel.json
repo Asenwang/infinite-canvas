@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "buildCommand": "bun install && bun run build",
-  "devCommand": "bun run dev",
-  "installCommand": "bun install",
+  "buildCommand": "cd web && bun run build",
+  "devCommand": "cd web && bun run dev",
+  "installCommand": "cd web && bun install",
   "env": {
     "NODE_ENV": "production"
   },
-  "outputDirectory": ".next"
+  "outputDirectory": "web/.next"
 }
