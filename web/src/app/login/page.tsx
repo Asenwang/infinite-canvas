@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { App, Button, Card, Form, Input, Typography } from "antd";
 
@@ -13,6 +13,14 @@ type FormValues = {
 };
 
 export default function LoginPage() {
+    return (
+        <Suspense fallback={<LoginPageLoading />}>
+            <LoginPageContent />
+        </Suspense>
+    );
+}
+
+function LoginPageContent() {
     const { message } = App.useApp();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -59,4 +67,8 @@ export default function LoginPage() {
             </Card>
         </main>
     );
+}
+
+function LoginPageLoading() {
+    return <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#fef3c7,transparent_35%),radial-gradient(circle_at_bottom_right,#dbeafe,transparent_35%),#f8fafc] px-6 py-10 text-sm text-stone-500">正在加载登录页...</main>;
 }
