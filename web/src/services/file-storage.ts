@@ -1,63 +1,53 @@
 "use client";
 
-import localforage from "localforage";
-import { nanoid } from "nanoid";
-
 export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
-
-const store = localforage.createInstance({ name: "infinite-canvas", storeName: "media_files" });
-const objectUrls = new Map<string, string>();
 
 export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
     const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
-    const storageKey = `${prefix}:${nanoid()}`;
-    await store.setItem(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
+    const formData = new FormData();
+    formData.set("file", blob, prefix);
+    formData.set("kind", prefix);
+    const response = await fetch("/api/storage/upload", { method: "POST", body: formData });
+    const payload = (await response.json()) as { code: number; msg: string; data?: { storageKey: string } };
+    if (!response.ok || payload.code !== 0 || !payload.data?.storageKey) throw new Error(payload.msg || "上传文件失败");
+    const storageKey = payload.data.storageKey;
+    const url = await resolveMediaUrl(storageKey, "");
     const meta = blob.type.startsWith("video/") ? await readVideoMeta(url) : blob.type.startsWith("audio/") ? await readAudioMeta(url) : {};
     return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta };
 }
 
 export async function resolveMediaUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
-    const cached = objectUrls.get(storageKey);
-    if (cached) return cached;
-    const blob = await store.getItem<Blob>(storageKey);
-    if (!blob) return fallback;
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    const response = await fetch(`/api/storage/resolve?key=${encodeURIComponent(storageKey)}`, { cache: "no-store" });
+    const payload = (await response.json()) as { code: number; msg: string; data?: { url: string } };
+    return !response.ok || payload.code !== 0 || !payload.data?.url ? fallback : payload.data.url;
 }
 
 export async function getMediaBlob(storageKey: string) {
-    return store.getItem<Blob>(storageKey);
+    const url = await resolveMediaUrl(storageKey, "");
+    if (!url) return null;
+    return (await fetch(url)).blob();
 }
 
 export async function setMediaBlob(storageKey: string, blob: Blob) {
-    await store.setItem(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    const formData = new FormData();
+    formData.set("file", blob, "media");
+    formData.set("kind", storageKey.slice(0, storageKey.indexOf(":")) || "file");
+    formData.set("objectKey", storageKey.slice(storageKey.indexOf(":") + 1));
+    const response = await fetch("/api/storage/upload", { method: "POST", body: formData });
+    const payload = (await response.json()) as { code: number; msg: string; data?: { storageKey: string } };
+    if (!response.ok || payload.code !== 0 || !payload.data?.storageKey) throw new Error(payload.msg || "上传文件失败");
+    return resolveMediaUrl(payload.data.storageKey, "");
 }
 
 export async function deleteStoredMedia(keys: Iterable<string>) {
-    await Promise.all(
-        Array.from(new Set(keys)).map(async (key) => {
-            const url = objectUrls.get(key);
-            if (url) URL.revokeObjectURL(url);
-            objectUrls.delete(key);
-            await store.removeItem(key);
-        }),
-    );
+    const unique = Array.from(new Set(keys)).filter(Boolean);
+    if (!unique.length) return;
+    await fetch("/api/storage/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ keys: unique }) });
 }
 
 export async function cleanupUnusedMedia(usedData: unknown) {
-    const usedKeys = collectMediaStorageKeys(usedData);
-    const unused: string[] = [];
-    await store.iterate((_value, key) => {
-        if (!usedKeys.has(key)) unused.push(key);
-    });
-    await Promise.all(unused.map((key) => store.removeItem(key)));
+    void usedData;
 }
 
 export function collectMediaStorageKeys(value: unknown, keys = new Set<string>()) {

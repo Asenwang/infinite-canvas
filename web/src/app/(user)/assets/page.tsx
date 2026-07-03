@@ -10,6 +10,7 @@ import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { uploadImage } from "@/services/image-storage";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
 
 type AssetFormValues = {
@@ -33,6 +34,8 @@ const kindOptions = [
 
 export default function AssetsPage() {
     const { message } = App.useApp();
+    const authLoading = useUserStore((state) => state.authLoading);
+    const dataReady = useUserStore((state) => state.dataReady);
     const copyText = useCopyText();
     const [form] = Form.useForm<AssetFormValues>();
     const coverInputRef = useRef<HTMLInputElement>(null);
@@ -186,6 +189,8 @@ export default function AssetsPage() {
         message.success("素材已删除");
         setDeletingAsset(null);
     };
+
+    if (authLoading || !dataReady) return <div className="flex h-full items-center justify-center bg-background text-sm text-stone-500 dark:text-stone-400">正在加载用户数据...</div>;
 
     return (
         <div className="flex h-full flex-col overflow-hidden bg-background text-stone-900 dark:text-stone-100">

@@ -8,6 +8,9 @@ description: 当前版本已实现但仍需人工验证的变更项
 - Vercel 部署：补充 `web/vercel.json`，用于 Vercel Root Directory 设置为 `web` 时直接识别并部署 Next.js 应用，避免根目录配置和项目目录不一致。
 - Vercel 部署：`next.config.ts` 读取根目录 `VERSION` / `CHANGELOG.md` 时增加缺失兜底，避免 Vercel Root Directory 为 `web` 时配置加载失败。
 - API 代理：HTTPS 页面使用 `http://` OpenAI 兼容 Base URL 时，自动通过同源 `/api/ai-proxy` 转发请求，避免浏览器 mixed content 和跨域限制。
+- 提示词库：移除没有封面素材图的提示词案例，避免提示词库和画布提示词选择弹窗展示空白卡片。
+- 账号与存储：新增登录页，未登录不能进入我的画布、生图工作台和我的素材；登录账号复用 `sub2api` 邮箱密码，用户画布、素材、生图记录改为按账号写入 PostgreSQL 的 `canvas` schema。
+- 文件存储：图片、视频、音频改为上传到腾讯云 COS 的 `creative-drawer/` 目录，数据库只保存 `storageKey` 和业务元信息。
 - 界面精简：移除页面文档和 GitHub 入口，视频创作台改为跳转到生图工作台，新用户默认使用浅色主题。
 - 图片生成：生成张数统一限制为 1-3 张，默认 1 张；移除 4k 图选项并限制最长边不超过 2048px。
 - 图片生成：旧版本已保存的画布默认生图张数 `3` 会一次性迁移为 `1`，避免线上仍显示旧默认值。

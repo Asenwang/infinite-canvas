@@ -1,0 +1,47 @@
+---
+title: 数据库结构
+description: 当前账号、会话和用户文档的 PostgreSQL 表设计
+---
+
+# 数据库结构
+
+当前版本复用 `sub2api` 的 `public.users` 用户表做登录鉴权，并把 Infinite Canvas 自己的业务表放到 PostgreSQL 的 `canvas` schema。媒体文件单独写入腾讯云 COS。
+
+建表 SQL 已放在：
+
+- `sql/postgres/init.sql`
+
+应用不会自动建表。部署前需要先手动执行这份 SQL。
+
+## public.users
+
+- 这张表来自 `sub2api`，Infinite Canvas 不会创建它。
+- 登录时直接复用其中的 `email`、`username`、`password_hash`、`status`、`deleted_at`。
+- 密码哈希算法与 `sub2api` 保持一致，使用 `bcrypt`。
+
+## canvas.user_sessions
+
+- `id`：会话 ID，字符串主键。
+- `user_id`：关联 `public.users.id`。
+- `session_token_hash`：会话 token 的 `sha256` 哈希，唯一。
+- `expires_at`：会话过期时间。
+- `created_at`：创建时间。
+
+浏览器 Cookie 只保存原始 token；数据库里保存哈希值，不直接落明文 token。
+
+## canvas.user_documents
+
+- `user_id`：关联 `public.users.id`。
+- `domain`：数据域，当前支持 `canvas`、`assets`、`image-workbench`。
+- `data_json`：该数据域完整 JSON 文档。
+- `created_at` / `updated_at`：创建和更新时间。
+
+主键为 `(user_id, domain)`，同一用户同一数据域只有一份文档。
+
+## 设计说明
+
+- 画布、素材和生图记录当前都按“整份 JSON 文档”存储，优先减少表数量和迁移复杂度。
+- 图片、视频等媒体上传到腾讯云 COS，数据库只保存 `storageKey`、类型和元信息。
+- 用户登录后，前端会先拉取对应文档，再恢复到本地运行时 store。
+- 应用只依赖 `public.users` 现有用户表，不会自行创建用户。
+- 如果缺少 `public.users`、`canvas.user_sessions`、`canvas.user_documents` 任意一张表，应用会直接报错提示先执行 `sql/postgres/init.sql`。

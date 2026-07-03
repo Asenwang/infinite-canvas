@@ -82,7 +82,7 @@ async function loadPrompts() {
             }
         }),
     );
-    const items = settled.flat();
+    const items = settled.flat().filter((item) => item.coverUrl.trim());
     memoryCache = { items, fetchedAt: Date.now() };
     return items;
 }

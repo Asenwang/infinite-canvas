@@ -1,22 +1,22 @@
 ---
 title: 画布数据结构
-description: 画布本地存储、节点结构、媒体文件与清理机制
+description: 画布运行时数据、用户文档结构、媒体文件与清理机制
 ---
 
 # 画布数据结构
 
-本文档说明当前画布在前端本地保存的数据结构、图片文件的存储和清理方式，以及后续接入后端存储时建议保持的兼容边界。
+本文档说明当前画布运行时数据结构、媒体文件的处理方式，以及登录后写入 PostgreSQL 的用户文档边界。
 
 ## 当前存储位置
 
-当前画布项目主要保存在浏览器本地：
+当前运行时会使用腾讯云 COS 作为媒体文件存储，数据库里只保存文件标识和元信息：
 
-- 画布项目 JSON：`localForage`，数据库名 `infinite-canvas`，storeName `app_state`，key 为 `infinite-canvas:canvas_store`。
-- 我的素材 JSON：`localForage`，数据库名 `infinite-canvas`，storeName `app_state`，key 为 `infinite-canvas:asset_store`。
-- 图片 Blob：单独存到 `localForage` 实例，数据库名 `infinite-canvas`，storeName `image_files`。
-- 视频等媒体 Blob：单独存到 `localForage` 实例，数据库名 `infinite-canvas`，storeName `media_files`。
+- 画布项目 JSON：同步到 PostgreSQL `canvas.user_documents.domain = canvas`；前端运行时仍会镜像到 `localForage` 的 `infinite-canvas:canvas_store`。
+- 我的素材 JSON：同步到 PostgreSQL `canvas.user_documents.domain = assets`；前端运行时仍会镜像到 `localForage` 的 `infinite-canvas:asset_store`。
+- 生图记录 JSON：同步到 PostgreSQL `canvas.user_documents.domain = image-workbench`。
+- 图片、视频、音频文件：上传到腾讯云 COS `creative-drawer/` 前缀。
 
-画布 JSON 不直接长期保存大体积 base64 图片或视频。图片节点、视频节点、助手图片和素材媒体只保存展示 URL、`storageKey` 和元信息，真实 Blob 通过 `storageKey` 读取。
+写入 PostgreSQL 前，图片节点、视频节点、助手图片和素材媒体会优先上传到 COS，再只把 `storageKey` 写入数据库，避免数据库里保存大体积 base64 或失效的 `blob:` URL。
 
 ## 画布项目结构
 

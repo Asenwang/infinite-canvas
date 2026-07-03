@@ -5,15 +5,37 @@ description: 前端优先的本地开发方式
 
 # 本地开发
 
-当前主应用以 `web/` 前端为主，AI 请求由浏览器前台直连用户自己的 OpenAI 兼容接口。
+当前主应用以 `web/` 前端为主，AI 请求仍由浏览器前台直连用户自己的 OpenAI 兼容接口；登录账号复用 `sub2api` 的 `public.users`，Infinite Canvas 自己的会话和用户数据写入 PostgreSQL 的 `canvas` schema。
 
 ## 1. 启动前端
 
 ```bash
+cp .env.example .env
 cd web
 bun install
 bun run dev
 ```
+
+其中 `.env` 至少要配置：
+
+```env
+DATABASE_URL=postgresql://postgres:your-password@127.0.0.1:16380/postgres
+AUTH_COOKIE_NAME=infinite_canvas_session
+AUTH_SESSION_TTL_DAYS=30
+COS_SECRET_ID=your-secret-id
+COS_SECRET_KEY=your-secret-key
+COS_BUCKET=your-bucket
+COS_REGION=ap-guangzhou
+COS_PREFIX=creative-drawer
+```
+
+然后先执行建表 SQL：
+
+```bash
+psql 'postgresql://postgres:your-password@127.0.0.1:16380/postgres' -f sql/postgres/init.sql
+```
+
+媒体文件不再写浏览器本地 Blob 存储。图片、视频、音频会通过 Next.js Route 上传到腾讯云 COS 的 `creative-drawer/` 目录前缀，再把 `storageKey` 和元信息写入 PostgreSQL。
 
 前端默认访问：
 

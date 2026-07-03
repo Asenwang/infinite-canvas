@@ -18,6 +18,7 @@ import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
@@ -128,12 +129,14 @@ function createCanvasNode(type: CanvasNodeType, position: Position, metadata?: C
 
 export default function CanvasPage() {
     const [mounted, setMounted] = useState(false);
+    const authLoading = useUserStore((state) => state.authLoading);
+    const dataReady = useUserStore((state) => state.dataReady);
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    if (!mounted) return <CanvasRefreshShell />;
+    if (!mounted || authLoading || !dataReady) return <CanvasRefreshShell />;
 
     return <InfiniteCanvasPage />;
 }

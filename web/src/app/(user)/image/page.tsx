@@ -3,7 +3,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
-import localforage from "localforage";
 import { saveAs } from "file-saver";
 
 import { ImageSettingsPanel } from "@/components/image-settings-panel";
@@ -17,8 +16,10 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { requestEdit, requestGeneration } from "@/services/api/image";
+import { fetchUserData, saveUserData } from "@/services/api/user-data";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
+import { useUserStore } from "@/stores/use-user-store";
 import type { ReferenceImage } from "@/types/image";
 
 type GeneratedImage = {
@@ -63,9 +64,7 @@ type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
-const LOG_STORE_KEY = "infinite-canvas:image_generation_logs";
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
-const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
 
 export default function ImagePage() {
     const { message } = App.useApp();
@@ -76,6 +75,8 @@ export default function ImagePage() {
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const addAsset = useAssetStore((state) => state.addAsset);
+    const authLoading = useUserStore((state) => state.authLoading);
+    const dataReady = useUserStore((state) => state.dataReady);
     const [prompt, setPrompt] = useState("");
     const [references, setReferences] = useState<ReferenceImage[]>([]);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -241,7 +242,9 @@ export default function ImagePage() {
 
     const deleteSelectedLogs = () => {
         const imageKeys = logs.filter((log) => selectedLogIds.includes(log.id)).flatMap((log) => log.images.map((image) => image.storageKey).filter((key): key is string => Boolean(key)));
-        void Promise.all([deleteStoredImages(imageKeys), ...selectedLogIds.map((id) => logStore.removeItem(id))]).then(refreshLogs);
+        const nextLogs = logs.filter((log) => !selectedLogIds.includes(log.id));
+        setLogs(nextLogs);
+        void deleteStoredImages(imageKeys).then(() => persistLogs(nextLogs));
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
             setResults([]);
@@ -251,7 +254,9 @@ export default function ImagePage() {
     };
 
     const saveLog = (log: GenerationLog) => {
-        void logStore.setItem(log.id, serializeLog(log)).then(refreshLogs);
+        const nextLogs = [log, ...logs.filter((item) => item.id !== log.id)].sort((a, b) => b.createdAt - a.createdAt);
+        setLogs(nextLogs);
+        void persistLogs(nextLogs);
     };
 
     const refreshLogs = async () => setLogs(await readStoredLogs());
@@ -305,6 +310,8 @@ export default function ImagePage() {
         setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
         void runGenerationSlot(index, snapshot).catch(() => {});
     };
+
+    if (authLoading || !dataReady) return <div className="flex h-full items-center justify-center bg-stone-50 text-sm text-stone-500 dark:bg-stone-950 dark:text-stone-400">正在加载用户数据...</div>;
 
     return (
         <div className="flex h-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
@@ -689,29 +696,38 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
 async function readStoredLogs() {
     if (typeof window === "undefined") return [];
     try {
-        const values: GenerationLog[] = [];
-        await logStore.iterate<GenerationLog, void>((value) => {
-            values.push(value);
-        });
-        const logs = await Promise.all(values.map(normalizeLog));
+        const data = await fetchUserData<{ "image-workbench"?: { logs?: GenerationLog[] } }>(["image-workbench"]);
+        const logs = await Promise.all((data["image-workbench"]?.logs || []).map(normalizeLog));
         return logs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     } catch {
         return [];
     }
 }
 
+async function persistLogs(logs: GenerationLog[]) {
+    await saveUserData("image-workbench", { logs: await Promise.all(logs.map(serializeLogForServer)) });
+}
+
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
     const references = await Promise.all(
-        (log.references || []).map(async (item) => ({
-            ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
-        })),
+        (log.references || []).map(async (item) => {
+            if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+            if (item.dataUrl?.startsWith("data:image/")) {
+                const image = await uploadImage(item.dataUrl);
+                return { ...item, dataUrl: image.url, storageKey: image.storageKey, type: image.mimeType };
+            }
+            return item;
+        }),
     );
     const images = await Promise.all(
-        (log.images || []).map(async (item) => ({
-            ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
-        })),
+        (log.images || []).map(async (item) => {
+            if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+            if (item.dataUrl?.startsWith("data:image/")) {
+                const image = await uploadImage(item.dataUrl);
+                return { ...item, dataUrl: image.url, storageKey: image.storageKey, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType };
+            }
+            return item;
+        }),
     );
     const config = normalizeLogConfig(log);
     return {
@@ -744,6 +760,15 @@ function serializeLog(log: GenerationLog): GenerationLog {
     };
 }
 
+async function serializeLogForServer(log: GenerationLog): Promise<GenerationLog> {
+    return {
+        ...log,
+        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
+        images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
+        thumbnails: [],
+    };
+}
+
 function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
     return {
         model: log.config?.model || log.model || "",
@@ -753,6 +778,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
         count: log.config?.count || String(log.imageCount || log.successCount || 1),
     };
 }
+
 
 function moveListItem<T>(items: T[], index: number, offset: number) {
     const targetIndex = index + offset;

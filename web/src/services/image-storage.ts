@@ -1,8 +1,5 @@
 "use client";
 
-import localforage from "localforage";
-
-import { nanoid } from "nanoid";
 import { readImageMeta } from "@/lib/image-utils";
 
 export type UploadedImage = {
@@ -14,39 +11,42 @@ export type UploadedImage = {
     mimeType: string;
 };
 
-const store = localforage.createInstance({ name: "infinite-canvas", storeName: "image_files" });
-const objectUrls = new Map<string, string>();
-
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
     const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
-    const storageKey = `image:${nanoid()}`;
-    await store.setItem(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
+    const formData = new FormData();
+    formData.set("file", blob, "image");
+    formData.set("kind", "image");
+    const response = await fetch("/api/storage/upload", { method: "POST", body: formData });
+    const payload = (await response.json()) as { code: number; msg: string; data?: { storageKey: string } };
+    if (!response.ok || payload.code !== 0 || !payload.data?.storageKey) throw new Error(payload.msg || "上传图片失败");
+    const storageKey = payload.data.storageKey;
+    const url = await resolveImageUrl(storageKey, "");
     const meta = await readImageMeta(url);
     return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || meta.mimeType };
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
-    const cached = objectUrls.get(storageKey);
-    if (cached) return cached;
-    const blob = await store.getItem<Blob>(storageKey);
-    if (!blob) return fallback;
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    const response = await fetch(`/api/storage/resolve?key=${encodeURIComponent(storageKey)}`, { cache: "no-store" });
+    const payload = (await response.json()) as { code: number; msg: string; data?: { url: string } };
+    return !response.ok || payload.code !== 0 || !payload.data?.url ? fallback : payload.data.url;
 }
 
 export async function getImageBlob(storageKey: string) {
-    return store.getItem<Blob>(storageKey);
+    const url = await resolveImageUrl(storageKey, "");
+    if (!url) return null;
+    return (await fetch(url)).blob();
 }
 
 export async function setImageBlob(storageKey: string, blob: Blob) {
-    await store.setItem(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    const formData = new FormData();
+    formData.set("file", blob, "image");
+    formData.set("kind", "image");
+    formData.set("objectKey", storageKey.slice(storageKey.indexOf(":") + 1));
+    const response = await fetch("/api/storage/upload", { method: "POST", body: formData });
+    const payload = (await response.json()) as { code: number; msg: string; data?: { storageKey: string } };
+    if (!response.ok || payload.code !== 0 || !payload.data?.storageKey) throw new Error(payload.msg || "上传图片失败");
+    return resolveImageUrl(payload.data.storageKey, "");
 }
 
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }) {
@@ -56,23 +56,13 @@ export async function imageToDataUrl(image: { url?: string; dataUrl?: string; st
 }
 
 export async function deleteStoredImages(keys: Iterable<string>) {
-    await Promise.all(
-        Array.from(new Set(keys)).map(async (key) => {
-            const url = objectUrls.get(key);
-            if (url) URL.revokeObjectURL(url);
-            objectUrls.delete(key);
-            await store.removeItem(key);
-        }),
-    );
+    const unique = Array.from(new Set(keys)).filter(Boolean);
+    if (!unique.length) return;
+    await fetch("/api/storage/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ keys: unique }) });
 }
 
 export async function cleanupUnusedImages(usedData: unknown) {
-    const usedKeys = collectImageStorageKeys(usedData);
-    const unused: string[] = [];
-    await store.iterate((_value, key) => {
-        if (!usedKeys.has(key)) unused.push(key);
-    });
-    await deleteStoredImages(unused);
+    void usedData;
 }
 
 export function collectImageStorageKeys(value: unknown, keys = new Set<string>()) {
