@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { useEffect } from "react";
 import { ProConfigProvider } from "@ant-design/pro-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -37,7 +38,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
                 <App>
                     <QueryClientProvider client={queryClient}>
                         <ClientRootInit>{children}</ClientRootInit>
-                        <AuthSessionSync />
+                        <Suspense fallback={null}>
+                            <AuthSessionSync />
+                        </Suspense>
                     </QueryClientProvider>
                 </App>
             </ProConfigProvider>
